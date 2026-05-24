@@ -37,8 +37,10 @@ async def on_startup(bot: Bot) -> None:
         BotCommand(command="memory", description="Моя память о тебе"),
         BotCommand(command="remember", description="Запомнить факт"),
         BotCommand(command="forget", description="Забыть факт"),
-        BotCommand(command="tasks", description="Список задач"),
+        BotCommand(command="today", description="📅 План на сегодня"),
+        BotCommand(command="tasks", description="Список активных задач"),
         BotCommand(command="addtask", description="Добавить задачу"),
+        BotCommand(command="progress", description="Взять задачу в работу"),
         BotCommand(command="done", description="Отметить задачу выполненной"),
         BotCommand(command="deltask", description="Удалить задачу"),
     ])

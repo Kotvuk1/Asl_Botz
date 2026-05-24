@@ -78,6 +78,8 @@ class Task(Base):
     title = Column(String(512), nullable=False)
     description = Column(Text, nullable=True)
     is_done = Column(Boolean, default=False, nullable=False)
+    # status: todo | in_progress | done
+    status = Column(String(16), default="todo", server_default="todo", nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -85,6 +87,7 @@ class Task(Base):
 
     __table_args__ = (
         Index("ix_tasks_user_id_is_done", "user_id", "is_done"),
+        Index("ix_tasks_user_id_status", "user_id", "status"),
     )
 
     def __repr__(self) -> str:

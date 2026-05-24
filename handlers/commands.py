@@ -15,7 +15,10 @@ from core.memory import (
     delete_memory,
     get_or_create_user,
 )
-from core.tools import add_task, get_tasks, complete_task, delete_task, format_tasks_list
+from core.tools import (
+    add_task, get_tasks, get_all_tasks, complete_task, set_in_progress,
+    delete_task, format_tasks_list, format_today_plan,
+)
 from database.models import User, Memory
 
 logger = logging.getLogger(__name__)
@@ -67,9 +70,11 @@ async def cmd_help(message: Message) -> None:
         "/memory — Показать сохранённые факты\n"
         "/remember &lt;ключ&gt; = &lt;значение&gt; — Запомнить факт\n"
         "/forget &lt;ключ&gt; — Забыть факт\n\n"
-        "<b>✅ Задачи:</b>\n"
-        "/tasks — Список задач\n"
+        "<b>📅 План / Задачи:</b>\n"
+        "/today — План на сегодня (3 секции)\n"
+        "/tasks — Список активных задач\n"
         "/addtask &lt;задача&gt; — Добавить задачу\n"
+        "/progress &lt;id&gt; — Взять в работу\n"
         "/done &lt;id&gt; — Отметить выполненной\n"
         "/deltask &lt;id&gt; — Удалить задачу"
         + owner_section,
@@ -137,6 +142,15 @@ async def cmd_forget(message: Message, command: CommandObject) -> None:
         await message.answer(f"Факт <b>{key}</b> не найден.", parse_mode="HTML")
 
 
+# ── /today ────────────────────────────────────────────────────────────────────
+
+@router.message(Command("today"))
+async def cmd_today(message: Message) -> None:
+    async with AsyncSessionFactory() as session:
+        tasks = await get_all_tasks(session, message.from_user.id)
+    await message.answer(format_today_plan(tasks), parse_mode="HTML")
+
+
 # ── /tasks ────────────────────────────────────────────────────────────────────
 
 @router.message(Command("tasks"))
@@ -155,6 +169,20 @@ async def cmd_addtask(message: Message, command: CommandObject) -> None:
     async with AsyncSessionFactory() as session:
         task = await add_task(session, message.from_user.id, title[:512])
     await message.answer(f"✅ Задача добавлена: <b>#{task.id}</b> {task.title}", parse_mode="HTML")
+
+
+@router.message(Command("progress"))
+async def cmd_progress(message: Message, command: CommandObject) -> None:
+    task_id_str = (command.args or "").strip()
+    if not task_id_str.isdigit():
+        await message.answer("Укажи номер: /progress <b>id</b>", parse_mode="HTML")
+        return
+    async with AsyncSessionFactory() as session:
+        ok = await set_in_progress(session, message.from_user.id, int(task_id_str))
+    if ok:
+        await message.answer(f"🔄 Задача <b>#{task_id_str}</b> — <b>В ПРОЦЕССЕ</b>", parse_mode="HTML")
+    else:
+        await message.answer(f"Задача #{task_id_str} не найдена.")
 
 
 @router.message(Command("done"))
