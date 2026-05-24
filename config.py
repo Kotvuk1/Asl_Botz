@@ -49,6 +49,12 @@ class Settings(BaseSettings):
             v = v.replace("postgres://", "postgresql+asyncpg://", 1)
         elif v.startswith("postgresql://") and "+asyncpg" not in v:
             v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        # asyncpg doesn't accept sslmode= query param — remove it;
+        # SSL is enabled via connect_args in the engine instead.
+        if "sslmode=" in v:
+            import re
+            v = re.sub(r"[?&]sslmode=[^&]*", "", v)
+            v = re.sub(r"\?$", "", v)
         return v
 
     @property
