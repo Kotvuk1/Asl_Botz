@@ -52,6 +52,7 @@ class GroqRouter:
         memory_context: str = "",
         current_datetime: str = "",
         tasks_context: str = "",
+        habits_context: str = "",
         think_mode: bool = False,
     ) -> str:
         system_content = _SYSTEM_PROMPT_TEMPLATE.format(
@@ -63,6 +64,12 @@ class GroqRouter:
             system_content += (
                 "\n\n## История задач пользователя (последние 90 дней):\n"
                 + tasks_context
+            )
+
+        if habits_context:
+            system_content += (
+                "\n\n## Привычки пользователя (используй ID для habitdone):\n"
+                + habits_context
             )
 
         if think_mode:

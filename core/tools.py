@@ -158,6 +158,21 @@ async def search_memories(
     return result.scalars().all()
 
 
+# ── Habits context for LLM ───────────────────────────────────────────────────
+
+async def get_habits_context(session: AsyncSession, user_id: int) -> str:
+    """Return active habits formatted for the LLM system prompt."""
+    habits = await get_habits(session, user_id, only_active=True)
+    if not habits:
+        return ""
+    done_today = await get_habits_done_today(session, user_id)
+    lines = []
+    for h in habits:
+        status = "✅ выполнено сегодня" if h.id in done_today else "◦ не отмечено"
+        lines.append(f"  #{h.id} {h.title} — {status}")
+    return "\n".join(lines)
+
+
 # ── Task context for LLM ──────────────────────────────────────────────────────
 
 async def get_tasks_context(session: AsyncSession, user_id: int, days: int = 90) -> str:

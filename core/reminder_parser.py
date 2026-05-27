@@ -189,6 +189,9 @@ def parse_deadline(text: str) -> datetime:
     now = _local_now().replace(second=0, microsecond=0)
     eod = {"hour": 23, "minute": 59, "second": 0, "microsecond": 0}
 
+    if text == "сегодня":
+        return _to_utc(now.replace(**eod))
+
     if text == "завтра":
         return _to_utc((now + timedelta(days=1)).replace(**eod))
 
