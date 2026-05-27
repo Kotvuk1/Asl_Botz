@@ -586,6 +586,45 @@ def format_habits_list(habits: List[Habit], done_today: Set[int]) -> str:
 
 # ── Formatting (plan / task list) ─────────────────────────────────────────────
 
+async def get_tomorrow_tasks(
+    session: AsyncSession,
+    user_id: int,
+) -> List[Task]:
+    """Return pending tasks with deadline falling on tomorrow (local time)."""
+    tomorrow_local = _local_today() + timedelta(days=1)
+    # Convert midnight boundaries to UTC
+    from datetime import time as dtime
+    tomorrow_start_utc = (
+        datetime.combine(tomorrow_local, dtime.min) - timedelta(hours=settings.tz_offset)
+    ).replace(tzinfo=timezone.utc)
+    tomorrow_end_utc = (
+        datetime.combine(tomorrow_local + timedelta(days=1), dtime.min) - timedelta(hours=settings.tz_offset)
+    ).replace(tzinfo=timezone.utc)
+
+    result = await session.execute(
+        select(Task).where(
+            Task.user_id == user_id,
+            Task.status != DONE,
+            Task.deadline >= tomorrow_start_utc,
+            Task.deadline < tomorrow_end_utc,
+        ).order_by(Task.deadline.asc())
+    )
+    return result.scalars().all()
+
+
+def format_tomorrow_plan(tasks: List[Task]) -> str:
+    if not tasks:
+        return (
+            "📅 <b>ПЛАН НА ЗАВТРА</b>\n\n"
+            "<i>Задач на завтра нет.</i>\n\n"
+            "Добавь: <i>«завтра мне надо X»</i> или /addtask название|medium|завтра"
+        )
+    lines = [f"📅 <b>ПЛАН НА ЗАВТРА</b>  <code>[{len(tasks)} задач]</code>\n"]
+    for t in tasks:
+        lines.append(f"  ◦ {_task_line(t)}")
+    return "\n".join(lines)
+
+
 def format_today_plan(tasks: List[Task]) -> str:
     if not tasks:
         return (

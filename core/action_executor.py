@@ -21,9 +21,11 @@ from core.tools import (
     format_stats,
     format_tasks_list,
     format_today_plan,
+    format_tomorrow_plan,
     get_all_tasks,
     get_habit_streak,
     get_tasks,
+    get_tomorrow_tasks,
     get_user_stats,
     log_habit,
     search_goals,
@@ -84,6 +86,8 @@ async def execute_action(
             return await _exec_donetask(user_id, params)
         elif command == "today":
             return await _exec_today(user_id)
+        elif command == "tomorrow":
+            return await _exec_tomorrow(user_id)
         elif command == "tasks":
             return await _exec_tasks(user_id)
         elif command == "stats":
@@ -205,6 +209,12 @@ async def _exec_today(user_id: int) -> str:
     async with AsyncSessionFactory() as session:
         tasks = await get_all_tasks(session, user_id)
     return format_today_plan(tasks)
+
+
+async def _exec_tomorrow(user_id: int) -> str:
+    async with AsyncSessionFactory() as session:
+        tasks = await get_tomorrow_tasks(session, user_id)
+    return format_tomorrow_plan(tasks)
 
 
 async def _exec_tasks(user_id: int) -> str:
