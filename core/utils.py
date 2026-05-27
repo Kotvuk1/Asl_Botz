@@ -14,16 +14,18 @@ def setup_logging() -> None:
 
     handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
 
-    # Always write to bot.log (next to this file's project root)
-    log_path = Path(__file__).resolve().parent.parent / "bot.log"
-    file_handler = RotatingFileHandler(
-        log_path,
-        maxBytes=5 * 1024 * 1024,  # 5 MB
-        backupCount=3,
-        encoding="utf-8",
-    )
-    file_handler.setFormatter(logging.Formatter(fmt, datefmt=datefmt))
-    handlers.append(file_handler)
+    # File logging only when running locally (Railway sets RAILWAY_ENVIRONMENT)
+    import os
+    if not os.getenv("RAILWAY_ENVIRONMENT"):
+        log_path = Path(__file__).resolve().parent.parent / "bot.log"
+        file_handler = RotatingFileHandler(
+            log_path,
+            maxBytes=5 * 1024 * 1024,  # 5 MB
+            backupCount=3,
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(logging.Formatter(fmt, datefmt=datefmt))
+        handlers.append(file_handler)
 
     logging.basicConfig(level=level, format=fmt, datefmt=datefmt, handlers=handlers)
 
