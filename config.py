@@ -19,10 +19,12 @@ class Settings(BaseSettings):
     # Whitelist (comma-separated telegram user IDs)
     whitelist_ids: str = ""
 
-    # Groq API keys (3 keys for rotation)
+    # Groq API keys — at least 1 required, up to 5 for rotation
     groq_api_key_1: str
-    groq_api_key_2: str
-    groq_api_key_3: str
+    groq_api_key_2: str = ""
+    groq_api_key_3: str = ""
+    groq_api_key_4: str = ""
+    groq_api_key_5: str = ""
 
     # Groq model
     groq_model: str = "llama-3.3-70b-versatile"
@@ -37,6 +39,14 @@ class Settings(BaseSettings):
     max_memory_items: int = 50
     bot_name: str = "Асылхан"
     bot_short_name: str = "Асл"
+
+    # Timezone (UTC offset, e.g. 5 = UTC+5 Almaty)
+    tz_offset: int = 5
+    # Weekly report day (0=Mon … 6=Sun) and hour (local time)
+    weekly_report_day: int = 6
+    weekly_report_hour: int = 9
+    # Daily digest hour (local time)
+    daily_digest_hour: int = 8
 
     # Logging
     log_level: str = "INFO"
@@ -59,7 +69,16 @@ class Settings(BaseSettings):
 
     @property
     def groq_keys(self) -> List[str]:
-        return [self.groq_api_key_1, self.groq_api_key_2, self.groq_api_key_3]
+        # Return only non-empty keys so rotation works with 1–5 keys
+        return [
+            k for k in [
+                self.groq_api_key_1,
+                self.groq_api_key_2,
+                self.groq_api_key_3,
+                self.groq_api_key_4,
+                self.groq_api_key_5,
+            ] if k
+        ]
 
     @property
     def allowed_user_ids(self) -> List[int]:

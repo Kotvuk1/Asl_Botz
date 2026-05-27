@@ -1,11 +1,11 @@
 """
-Groq API router with smart rotation across 3 API keys.
+Groq API router with smart rotation across up to 5 API keys.
 
 Strategy:
   1. Try current key.
   2. On RateLimitError or AuthenticationError → rotate to next key.
-  3. If all 3 keys exhausted → raise final error.
-  4. Tracks per-key failure counts; resets after successful call.
+  3. If all keys exhausted → raise final error.
+  4. Tracks per-key failure counts and cooldowns (60s); resets on success.
 """
 
 import asyncio
@@ -51,11 +51,27 @@ class GroqRouter:
         messages: List[dict],
         memory_context: str = "",
         current_datetime: str = "",
+        tasks_context: str = "",
+        think_mode: bool = False,
     ) -> str:
         system_content = _SYSTEM_PROMPT_TEMPLATE.format(
             memory_context=memory_context or "Нет сохранённых данных.",
             current_datetime=current_datetime,
         )
+
+        if tasks_context:
+            system_content += (
+                "\n\n## История задач пользователя (последние 90 дней):\n"
+                + tasks_context
+            )
+
+        if think_mode:
+            system_content += (
+                "\n\n## РЕЖИМ «ДУМАЕМ ВСЛУХ»:\n"
+                "Пользователь хочет подумать вслух. Не давай готовых решений и советов. "
+                "Задавай уточняющие вопросы по одному. Помогай ему самому прийти к выводу. "
+                "Действуй как коуч: слушай, отражай, уточняй."
+            )
 
         full_messages = [{"role": "system", "content": system_content}] + messages
 
@@ -98,6 +114,55 @@ class GroqRouter:
 
             except APIError as e:
                 logger.error("Groq APIError on key #%d: %s", current_idx, e)
+                raise
+
+        raise RuntimeError(
+            "All Groq API keys exhausted. Please wait a minute and try again."
+        )
+
+    async def summarize(self, messages: List[dict], system_prompt: str) -> str:
+        """
+        Light summarization call with key rotation (same as chat() but smaller tokens).
+        """
+        full_messages = [{"role": "system", "content": system_prompt}] + messages
+
+        async with self._lock:
+            start_index = self._current_index
+
+        attempts = 0
+        current_idx = start_index
+
+        while attempts < len(self._keys):
+            client = self._clients[current_idx]
+            try:
+                response = await client.chat.completions.create(
+                    model=self._model,
+                    messages=full_messages,
+                    max_tokens=400,
+                    temperature=0.3,
+                )
+                async with self._lock:
+                    self._failures[current_idx] = 0
+                    self._current_index = current_idx
+                return response.choices[0].message.content.strip()
+
+            except RateLimitError:
+                logger.warning("Groq key #%d rate limited (summarize), rotating.", current_idx)
+                self._failures[current_idx] += 1
+                self._last_error_time[current_idx] = time.time()
+                current_idx = self._next_key_index(current_idx)
+                attempts += 1
+                await asyncio.sleep(1)
+
+            except AuthenticationError:
+                logger.error("Groq key #%d auth failed (summarize).", current_idx)
+                self._failures[current_idx] += 1
+                self._last_error_time[current_idx] = time.time()
+                current_idx = self._next_key_index(current_idx)
+                attempts += 1
+
+            except APIError as e:
+                logger.error("Groq APIError on key #%d (summarize): %s", current_idx, e)
                 raise
 
         raise RuntimeError(
