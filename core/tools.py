@@ -446,7 +446,7 @@ async def delete_goal(session: AsyncSession, user_id: int, goal_id: int) -> bool
 
 def format_goals_list(goals: List[Goal]) -> str:
     if not goals:
-        return "🎯 Целей пока нет. Добавь: /addgoal название"
+        return "🎯 Целей пока нет. Напиши: <i>«хочу X к [дата]»</i>"
 
     status_icon = {"active": "🎯", "done": "✅", "archived": "📦"}
     lines = ["🎯 <b>Твои цели:</b>\n"]
@@ -590,12 +590,12 @@ async def get_habits_done_today(
 
 def format_habits_list(habits: List[Habit], done_today: Set[int]) -> str:
     if not habits:
-        return "🔁 Привычек пока нет. Добавь: /addhabit название"
+        return "🔁 Привычек пока нет. Напиши: <i>«буду каждый день X»</i>"
 
     lines = ["🔁 <b>Твои привычки:</b>\n"]
     for h in habits:
         done_mark = "✅" if h.id in done_today else "◦"
-        lines.append(f"{done_mark} <b>#{h.id}</b> {h.title}   /habitdone {h.id}")
+        lines.append(f"{done_mark} <b>#{h.id}</b> {h.title}")
     return "\n".join(lines)
 
 
@@ -632,7 +632,7 @@ def format_tomorrow_plan(tasks: List[Task]) -> str:
         return (
             "📅 <b>ПЛАН НА ЗАВТРА</b>\n\n"
             "<i>Задач на завтра нет.</i>\n\n"
-            "Добавь: <i>«завтра мне надо X»</i> или /addtask название|medium|завтра"
+            "Скажи: <i>«завтра мне надо X»</i> — и я добавлю."
         )
     lines = [f"📅 <b>ПЛАН НА ЗАВТРА</b>  <code>[{len(tasks)} задач]</code>\n"]
     for t in tasks:
@@ -644,7 +644,7 @@ def format_today_plan(tasks: List[Task]) -> str:
     if not tasks:
         return (
             "📅 <b>ПЛАН НА СЕГОДНЯ</b>\n\n"
-            "<i>Задач пока нет. Добавь: /addtask название</i>"
+            "<i>Задач пока нет. Скажи: «сегодня надо X»</i>"
         )
 
     done = [t for t in tasks if t.status == DONE]

@@ -143,10 +143,7 @@ async def _exec_addhabit(user_id: int, title: str) -> str:
         return "⚠️ Не смог добавить привычку — не указано название."
     async with AsyncSessionFactory() as session:
         habit = await add_habit(session, user_id, title[:256])
-    return (
-        f"🔁 Привычка добавлена: <b>#{habit.id}</b> {habit.title}\n"
-        f"Каждый день отмечай: /habitdone {habit.id}"
-    )
+    return f"🔁 Привычка добавлена: <b>#{habit.id}</b> {habit.title}"
 
 
 async def _exec_addgoal(user_id: int, params: str) -> str:
