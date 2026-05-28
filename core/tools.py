@@ -156,7 +156,7 @@ def format_mood_history(logs: List[MoodLog]) -> str:
     for log in reversed(logs):  # show oldest first
         dt = log.created_at
         if dt.tzinfo is not None:
-            local_dt = dt.astimezone(timezone.utc) + timedelta(hours=settings.tz_offset)
+            local_dt = dt.replace(tzinfo=None) + timedelta(hours=settings.tz_offset)
         else:
             local_dt = dt + timedelta(hours=settings.tz_offset)
         date_str = local_dt.strftime("%d.%m %H:%M")
@@ -207,7 +207,7 @@ def format_journal(entries: List[JournalEntry]) -> str:
     for entry in entries:
         dt = entry.created_at
         if dt.tzinfo is not None:
-            local_dt = dt.astimezone(timezone.utc) + timedelta(hours=settings.tz_offset)
+            local_dt = dt.replace(tzinfo=None) + timedelta(hours=settings.tz_offset)
         else:
             local_dt = dt + timedelta(hours=settings.tz_offset)
         date_str = local_dt.strftime("%d.%m.%Y %H:%M")
@@ -246,7 +246,7 @@ async def get_mood_context(session: AsyncSession, user_id: int) -> str:
     for log in reversed(logs):
         dt = log.created_at
         if dt.tzinfo is not None:
-            local_dt = dt.astimezone(timezone.utc) + timedelta(hours=settings.tz_offset)
+            local_dt = dt.replace(tzinfo=None) + timedelta(hours=settings.tz_offset)
         else:
             local_dt = dt + timedelta(hours=settings.tz_offset)
         date_str = local_dt.strftime("%d.%m")
