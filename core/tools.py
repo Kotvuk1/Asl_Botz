@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from config import settings
 from database.models import Budget, FinancialGoal, Transaction
 
 logger = logging.getLogger(__name__)
@@ -300,8 +301,7 @@ def format_transactions(transactions: List[Transaction]) -> str:
         sign = "+" if tx.type == "income" else "−"
         dt = tx.created_at
         if dt and dt.tzinfo:
-            from datetime import timedelta
-            local_dt = dt + timedelta(hours=5)  # UTC+5
+            local_dt = dt + timedelta(hours=settings.tz_offset)
             date_str = local_dt.strftime("%d.%m %H:%M")
         else:
             date_str = "—"
@@ -390,8 +390,7 @@ def format_goals(goals: List[FinancialGoal]) -> str:
 
         dl_str = ""
         if g.deadline:
-            from datetime import timedelta
-            local_dl = g.deadline + timedelta(hours=5)
+            local_dl = g.deadline + timedelta(hours=settings.tz_offset)
             dl_str = f"  📅 до {local_dl.strftime('%d.%m.%Y')}"
 
         lines.append(
@@ -406,13 +405,12 @@ def format_goals(goals: List[FinancialGoal]) -> str:
 async def export_financial_data(session: AsyncSession, user_id: int) -> str:
     """Export all financial data for user as plain text."""
     from core.memory import get_memories  # late import to avoid circular
-    from datetime import timedelta
 
-    now_str = (datetime.now(timezone.utc) + timedelta(hours=5)).strftime("%d.%m.%Y %H:%M")
+    now_str = (datetime.now(timezone.utc) + timedelta(hours=settings.tz_offset)).strftime("%d.%m.%Y %H:%M")
     lines = [
         "═══════════════════════════════════",
         "Экспорт данных Бакыт (финансовый помощник)",
-        f"Дата: {now_str} (UTC+5)",
+        f"Дата: {now_str} (UTC+{settings.tz_offset})",
         "═══════════════════════════════════",
         "",
     ]
@@ -441,7 +439,7 @@ async def export_financial_data(session: AsyncSession, user_id: int) -> str:
     if txs:
         for tx in txs:
             dt = tx.created_at
-            date_str = (dt + timedelta(hours=5)).strftime("%d.%m.%Y %H:%M") if dt else "—"
+            date_str = (dt + timedelta(hours=settings.tz_offset)).strftime("%d.%m.%Y %H:%M") if dt else "—"
             sign = "+" if tx.type == "income" else "-"
             desc = f" ({tx.description})" if tx.description else ""
             lines.append(
@@ -474,7 +472,7 @@ async def export_financial_data(session: AsyncSession, user_id: int) -> str:
             s_icon = {"done": "✓", "active": "○", "archived": "—"}.get(g.status, "○")
             dl_str = ""
             if g.deadline:
-                local_dl = g.deadline + timedelta(hours=5)
+                local_dl = g.deadline + timedelta(hours=settings.tz_offset)
                 dl_str = f" → до {local_dl.strftime('%d.%m.%Y')}"
             target = Decimal(str(g.target_amount))
             current = Decimal(str(g.current_amount))
