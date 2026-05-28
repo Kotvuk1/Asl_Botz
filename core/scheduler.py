@@ -356,7 +356,7 @@ def _build_digest(
     if pending_habits:
         lines.append("🔁 <b>Привычки на сегодня:</b>")
         for h in pending_habits:
-            lines.append(f"  ◦ {h.title}  /habitdone {h.id}")
+            lines.append(f"  ◦ {h.title}")
         lines.append("")
     elif habits:
         lines.append("✅ <b>Все привычки уже выполнены!</b>\n")
