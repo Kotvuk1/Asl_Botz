@@ -9,7 +9,7 @@ returning a result string (or None if the action sends its own message).
 """
 import logging
 import re
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 from core.db import AsyncSessionFactory
 from core.reminder_parser import format_remind_at, parse_deadline, parse_reminder
