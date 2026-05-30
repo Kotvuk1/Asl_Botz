@@ -11,7 +11,7 @@ from aiogram.types import Message
 from aiogram.types import BufferedInputFile
 
 from config import settings
-from core.action_executor import execute_action, extract_action
+from core.action_executor import execute_action, extract_all_actions
 from core.whitelist import is_allowed
 from core.db import AsyncSessionFactory
 from core.llm import groq_router
@@ -159,11 +159,12 @@ async def _process_text(message: Message, text: str) -> None:
     msg_date: Optional[datetime] = message.date if message.date else None
     asyncio.create_task(_bg_extract_memories(user.id, text, reply, msg_date))
 
-    # ── Action detection & execution ──────────────────────────────────────
-    action_str, reply_text = extract_action(reply)
+    # ── Action detection & execution (supports multiple [ACTION:...] tags) ──
+    action_list, reply_text = extract_all_actions(reply)
     final_reply = reply_text
+    action_results: list[str] = []
 
-    if action_str:
+    for action_str in action_list:
         result = await execute_action(action_str, user.id, message.chat.id)
 
         if isinstance(result, tuple) and result[0] == "export":
@@ -182,12 +183,12 @@ async def _process_text(message: Message, text: str) -> None:
             return
 
         elif isinstance(result, str):
-            # Prepend action result to LLM reply text
-            if reply_text:
-                final_reply = f"{result}\n\n{reply_text}"
-            else:
-                final_reply = result
-        # result is None → action failed silently, show LLM text as-is
+            action_results.append(result)
+        # result is None → action failed silently
+
+    if action_results:
+        parts = action_results + ([reply_text] if reply_text else [])
+        final_reply = "\n\n".join(parts)
 
     final_reply = _clean_reply(final_reply)
     try:

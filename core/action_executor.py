@@ -41,19 +41,34 @@ from database.models import Reminder
 
 logger = logging.getLogger(__name__)
 
-# Regex to detect and capture [ACTION:...] at the start of an LLM reply
-ACTION_RE = re.compile(r"^\[ACTION:([^\]]+)\]\s*\n?", re.DOTALL)
+# Regex for ACTION tags (can appear anywhere in reply, may have multiple)
+_ACTION_TAG_RE = re.compile(r"\[ACTION:([^\]]+)\]", re.DOTALL)
 
 
 def extract_action(reply: str) -> Tuple[Optional[str], str]:
     """
-    Extract [ACTION:...] tag from the start of an LLM reply.
-    Returns (action_content | None, cleaned_reply_text).
+    Extract [ACTION:...] tag(s) from an LLM reply.
+    Returns (first_action_content | None, reply_text_with_all_tags_removed).
+    All [ACTION:...] tags are stripped from the reply text.
     """
-    m = ACTION_RE.match(reply.strip())
-    if m:
-        return m.group(1).strip(), reply[m.end():].strip()
-    return None, reply
+    reply = reply.strip()
+    actions = _ACTION_TAG_RE.findall(reply)
+    clean_reply = _ACTION_TAG_RE.sub("", reply).strip()
+    if actions:
+        # Return first action for the main executor, store the rest
+        return actions[0].strip(), clean_reply
+    return None, clean_reply
+
+
+def extract_all_actions(reply: str) -> Tuple[List[str], str]:
+    """
+    Extract ALL [ACTION:...] tags from an LLM reply.
+    Returns (list_of_action_contents, reply_text_with_all_tags_removed).
+    """
+    reply = reply.strip()
+    actions = [a.strip() for a in _ACTION_TAG_RE.findall(reply)]
+    clean_reply = _ACTION_TAG_RE.sub("", reply).strip()
+    return actions, clean_reply
 
 
 async def execute_action(

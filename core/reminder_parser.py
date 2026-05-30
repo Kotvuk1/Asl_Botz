@@ -198,14 +198,24 @@ def parse_deadline(text: str) -> datetime:
     if text == "послезавтра":
         return _to_utc((now + timedelta(days=2)).replace(**eod))
 
-    # через X дней / через X недель
+    # через неделю / через месяц (без числа)
+    if text in ("через неделю", "через месяц"):
+        days = 30 if text == "через месяц" else 7
+        return _to_utc((now + timedelta(days=days)).replace(**eod))
+
+    # через X дней / через X недель / через X месяцев
     m = re.match(
-        r"^через\s+(\d+)\s+(день|дня|дней|неделю|недели|недель)$",
+        r"^через\s+(\d+)\s+(день|дня|дней|неделю|недели|недель|месяц|месяца|месяцев)$",
         text, re.I,
     )
     if m:
         n, unit = int(m.group(1)), m.group(2)
-        days = 7 * n if unit.startswith("нед") else n
+        if unit.startswith("нед"):
+            days = 7 * n
+        elif unit.startswith("месяц") or unit.startswith("мес"):
+            days = 30 * n
+        else:
+            days = n
         return _to_utc((now + timedelta(days=days)).replace(**eod))
 
     # DD.MM[.YYYY] [HH:MM]
