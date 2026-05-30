@@ -1,4 +1,5 @@
 import asyncio
+import html
 import logging
 import re
 from datetime import datetime, timezone
@@ -82,14 +83,21 @@ def _clean_reply(text: str) -> str:
     return text
 
 
-async def _animate_thinking(thinking_msg: Message, chat_id: int) -> None:
-    """Animate 'Думаю...' while LLM is working."""
+async def _animate_thinking(
+    thinking_msg: Message,
+    chat_id: int,
+    prefix: str = "",
+) -> None:
+    """Animate 'Думаю...' while LLM is working.
+    prefix: optional text shown above the animation (e.g. voice transcription).
+    """
     i = 0
     while True:
         await asyncio.sleep(1.2)
         i = (i + 1) % len(_THINKING_FRAMES)
         try:
-            await thinking_msg.edit_text(_THINKING_FRAMES[i], parse_mode="HTML")
+            frame = f"{prefix}\n\n{_THINKING_FRAMES[i]}" if prefix else _THINKING_FRAMES[i]
+            await thinking_msg.edit_text(frame, parse_mode="HTML")
             await thinking_msg.bot.send_chat_action(chat_id, "typing")
         except Exception:
             break
@@ -97,15 +105,33 @@ async def _animate_thinking(thinking_msg: Message, chat_id: int) -> None:
 
 # ── Core processing ───────────────────────────────────────────────────────────
 
-async def _process_text(message: Message, text: str) -> None:
-    """Process text (from typed or voice message) through the LLM pipeline."""
+async def _process_text(
+    message: Message,
+    text: str,
+    voice_transcription: Optional[str] = None,
+) -> None:
+    """Process text (from typed or voice message) through the LLM pipeline.
+
+    voice_transcription: if set, the original voice text is shown above the
+    bot's answer so the user sees what was recognised + the reply together.
+    """
     user = message.from_user
 
+    # Build voice prefix (shown during animation and in final reply)
+    voice_prefix = ""
+    if voice_transcription:
+        safe = html.escape(voice_transcription)
+        # Truncate very long transcriptions for display
+        if len(safe) > 300:
+            safe = safe[:297] + "…"
+        voice_prefix = f"🎙 <i>Вы сказали:</i> «{safe}»"
+
     await message.bot.send_chat_action(message.chat.id, "typing")
-    thinking_msg = await message.answer("🤔 <i>Думаю...</i>", parse_mode="HTML")
+    initial = f"{voice_prefix}\n\n🤔 <i>Думаю...</i>" if voice_prefix else "🤔 <i>Думаю...</i>"
+    thinking_msg = await message.answer(initial, parse_mode="HTML")
 
     anim_task = asyncio.create_task(
-        _animate_thinking(thinking_msg, message.chat.id)
+        _animate_thinking(thinking_msg, message.chat.id, prefix=voice_prefix)
     )
 
     async with AsyncSessionFactory() as session:
@@ -191,6 +217,11 @@ async def _process_text(message: Message, text: str) -> None:
         final_reply = "\n\n".join(parts)
 
     final_reply = _clean_reply(final_reply)
+
+    # Prepend voice transcription header to the final answer
+    if voice_prefix:
+        final_reply = f"{voice_prefix}\n\n{final_reply}"
+
     try:
         await thinking_msg.edit_text(final_reply, parse_mode="HTML")
     except Exception:
@@ -238,15 +269,15 @@ async def handle_voice(message: Message) -> None:
         await status_msg.edit_text("🎙 Голос не распознан (тишина или шум).")
         return
 
-    # Show transcription briefly, then process
-    await status_msg.edit_text(
-        f"🎙 <i>Распознал:</i> {text}", parse_mode="HTML"
-    )
-    await asyncio.sleep(0.5)
-    await status_msg.delete()
+    # Delete "Распознаю..." status — the transcription will be shown
+    # as part of the final answer (voice_prefix in _process_text)
+    try:
+        await status_msg.delete()
+    except Exception:
+        pass
 
-    # Process the transcribed text as a regular message
-    await _process_text(message, text)
+    # Pass transcription so it's shown above the bot's answer
+    await _process_text(message, text, voice_transcription=text)
 
 
 # ── Main text handler ─────────────────────────────────────────────────────────
