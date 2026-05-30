@@ -22,9 +22,9 @@ from core.tools import (
     format_tasks_list,
     format_today_plan,
     format_tomorrow_plan,
-    get_all_tasks,
     get_habit_streak,
     get_tasks,
+    get_today_tasks,
     get_tomorrow_tasks,
     get_user_stats,
     log_habit,
@@ -204,7 +204,7 @@ async def _exec_donetask(user_id: int, task_id_str: str) -> str:
 
 async def _exec_today(user_id: int) -> str:
     async with AsyncSessionFactory() as session:
-        tasks = await get_all_tasks(session, user_id)
+        tasks = await get_today_tasks(session, user_id)
     return format_today_plan(tasks)
 
 

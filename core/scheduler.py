@@ -69,60 +69,90 @@ def _local_today() -> date:
 
 # ── Reminders ─────────────────────────────────────────────────────────────────
 
+async def send_due_reminders(bot) -> int:
+    """Check DB and fire all overdue reminders. Returns count sent."""
+    now_utc = datetime.now(timezone.utc)
+    sent_count = 0
+    try:
+        async with AsyncSessionFactory() as session:
+            result = await session.execute(
+                select(Reminder).where(
+                    Reminder.remind_at <= now_utc,
+                    Reminder.is_sent == False,  # noqa: E712
+                ).order_by(Reminder.remind_at.asc())
+            )
+            due = result.scalars().all()
+
+            if due:
+                logger.info("Reminder check: %d due reminders found.", len(due))
+
+            for r in due:
+                # Warn if reminder is very late (> 10 min overdue)
+                late_seconds = (now_utc - r.remind_at).total_seconds()
+                late_note = ""
+                if late_seconds > 600:
+                    late_min = int(late_seconds / 60)
+                    late_note = f"\n<i>(опоздало на {late_min} мин — бот был недоступен)</i>"
+
+                sent = False
+                try:
+                    await bot.send_message(
+                        r.chat_id,
+                        f"⏰ <b>Напоминание:</b>\n\n{r.text}{late_note}",
+                        parse_mode="HTML",
+                    )
+                    sent = True
+                    sent_count += 1
+                    logger.info("Reminder #%d sent to chat %d (late %.0fs)", r.id, r.chat_id, late_seconds)
+                except Exception:
+                    logger.exception("Failed to send reminder #%d to chat %d", r.id, r.chat_id)
+
+                if not sent:
+                    continue  # retry on next tick
+
+                # Mark as sent only after successful delivery
+                await session.execute(
+                    update(Reminder)
+                    .where(Reminder.id == r.id)
+                    .values(is_sent=True)
+                )
+
+                # Reschedule recurring reminder
+                if r.repeat_pattern:
+                    # Always schedule next from NOW (not from original time) if overdue > 1h
+                    base_dt = r.remind_at if late_seconds < 3600 else now_utc
+                    next_dt = next_occurrence(base_dt, r.repeat_pattern)
+                    # Safety: if next_dt is still in the past, advance until future
+                    while next_dt <= now_utc:
+                        next_dt = next_occurrence(next_dt, r.repeat_pattern)
+                    new_r = Reminder(
+                        user_id=r.user_id,
+                        chat_id=r.chat_id,
+                        text=r.text,
+                        remind_at=next_dt,
+                        repeat_pattern=r.repeat_pattern,
+                    )
+                    session.add(new_r)
+                    logger.info("Rescheduled recurring reminder #%d → %s", r.id, next_dt)
+
+            await session.commit()
+    except Exception:
+        logger.exception("send_due_reminders: DB error")
+    return sent_count
+
+
 async def reminder_loop(bot) -> None:
     """Fires pending reminders every 30 s. Reschedules recurring ones."""
+    logger.info("Reminder loop started.")
+    tick = 0
     while True:
         try:
-            now_utc = datetime.now(timezone.utc)
-            async with AsyncSessionFactory() as session:
-                result = await session.execute(
-                    select(Reminder).where(
-                        Reminder.remind_at <= now_utc,
-                        Reminder.is_sent == False,  # noqa: E712
-                    )
-                )
-                due = result.scalars().all()
-                for r in due:
-                    sent = False
-                    try:
-                        await bot.send_message(
-                            r.chat_id,
-                            f"⏰ <b>Напоминание:</b>\n\n{r.text}",
-                            parse_mode="HTML",
-                        )
-                        sent = True
-                        logger.info("Reminder %d sent to chat %d", r.id, r.chat_id)
-                    except Exception as e:
-                        logger.error("Failed to send reminder %d: %s", r.id, e)
-
-                    if not sent:
-                        continue  # Don't mark as sent — retry on next tick
-
-                    # Mark as sent only after successful delivery
-                    await session.execute(
-                        update(Reminder)
-                        .where(Reminder.id == r.id)
-                        .values(is_sent=True)
-                    )
-
-                    # Reschedule recurring reminder
-                    if r.repeat_pattern:
-                        next_dt = next_occurrence(r.remind_at, r.repeat_pattern)
-                        new_r = Reminder(
-                            user_id=r.user_id,
-                            chat_id=r.chat_id,
-                            text=r.text,
-                            remind_at=next_dt,
-                            repeat_pattern=r.repeat_pattern,
-                        )
-                        session.add(new_r)
-                        logger.info(
-                            "Rescheduled recurring reminder %d → %s", r.id, next_dt
-                        )
-
-                await session.commit()
-        except Exception as e:
-            logger.error("Reminder loop error: %s", e)
+            await send_due_reminders(bot)
+            tick += 1
+            if tick % 120 == 0:  # log every hour (120 * 30s = 3600s)
+                logger.info("Reminder loop alive, tick=%d", tick)
+        except Exception:
+            logger.exception("Reminder loop unexpected error at tick=%d", tick)
         await asyncio.sleep(30)
 
 

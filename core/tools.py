@@ -3,7 +3,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional, Set, Tuple
 
-from sqlalchemy import select, update, or_
+from sqlalchemy import and_, select, update, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
@@ -601,6 +601,44 @@ def format_habits_list(habits: List[Habit], done_today: Set[int]) -> str:
 
 # ── Formatting (plan / task list) ─────────────────────────────────────────────
 
+async def get_today_tasks(session: AsyncSession, user_id: int) -> List[Task]:
+    """Return only tasks relevant for today's plan:
+    - Overdue (deadline < today, not done)
+    - Due today
+    - In progress (regardless of deadline)
+    - Recently created todos without deadline (last 7 days)
+    NOT: old floating todos without deadline from weeks ago.
+    """
+    from datetime import time as dtime
+    today_local = _local_today()
+
+    today_start_utc = (
+        datetime.combine(today_local, dtime.min) - timedelta(hours=settings.tz_offset)
+    ).replace(tzinfo=timezone.utc)
+    today_end_utc = (
+        datetime.combine(today_local + timedelta(days=1), dtime.min) - timedelta(hours=settings.tz_offset)
+    ).replace(tzinfo=timezone.utc)
+    week_ago_utc = datetime.now(timezone.utc) - timedelta(days=7)
+
+    result = await session.execute(
+        select(Task).where(
+            Task.user_id == user_id,
+            Task.status != DONE,
+            or_(
+                # Always show in-progress
+                Task.status == IN_PROGRESS,
+                # Due today
+                and_(Task.deadline >= today_start_utc, Task.deadline < today_end_utc),
+                # Overdue (has deadline in the past)
+                and_(Task.deadline.isnot(None), Task.deadline < today_start_utc),
+                # Recent todos with no deadline (last 7 days)
+                and_(Task.deadline.is_(None), Task.created_at >= week_ago_utc),
+            )
+        ).order_by(Task.deadline.asc().nullslast(), Task.priority.desc(), Task.created_at.asc())
+    )
+    return result.scalars().all()
+
+
 async def get_tomorrow_tasks(
     session: AsyncSession,
     user_id: int,
@@ -641,39 +679,61 @@ def format_tomorrow_plan(tasks: List[Task]) -> str:
 
 
 def format_today_plan(tasks: List[Task]) -> str:
+    """Format today's plan — tasks must already be filtered by get_today_tasks()."""
     if not tasks:
         return (
             "📅 <b>ПЛАН НА СЕГОДНЯ</b>\n\n"
-            "<i>Задач пока нет. Скажи: «сегодня надо X»</i>"
+            "<i>На сегодня задач нет. Скажи: «сегодня надо X»</i>"
         )
 
-    done = [t for t in tasks if t.status == DONE]
-    in_progress = [t for t in tasks if t.status == IN_PROGRESS]
-    todo = [t for t in tasks if t.status == TODO]
+    today_local = _local_today()
+    now_utc = datetime.now(timezone.utc)
 
-    total = len(tasks)
-    done_count = len(done)
+    from datetime import time as dtime
+    today_start_utc = (
+        datetime.combine(today_local, dtime.min) - timedelta(hours=settings.tz_offset)
+    ).replace(tzinfo=timezone.utc)
+    today_end_utc = (
+        datetime.combine(today_local + timedelta(days=1), dtime.min) - timedelta(hours=settings.tz_offset)
+    ).replace(tzinfo=timezone.utc)
 
-    lines = [f"📅 <b>ПЛАН НА СЕГОДНЯ</b>  <code>[{done_count}/{total}]</code>\n"]
+    overdue     = [t for t in tasks if t.deadline and t.deadline < today_start_utc and t.status != DONE]
+    due_today   = [t for t in tasks if t.deadline and today_start_utc <= t.deadline < today_end_utc and t.status != DONE]
+    in_progress = [t for t in tasks if t.status == IN_PROGRESS and (not t.deadline or t.deadline >= today_start_utc)]
+    no_deadline = [t for t in tasks if t.deadline is None and t.status == TODO]
 
-    if done:
-        lines.append("✅ <b>ВЫПОЛНЕНО:</b>")
-        for t in done:
-            lines.append(f"  ✓ <s>{t.title}</s>")
+    # Deduplicate in_progress that might also be in due_today
+    in_progress_ids = {t.id for t in in_progress}
+    due_today   = [t for t in due_today   if t.id not in in_progress_ids]
+    overdue     = [t for t in overdue     if t.id not in in_progress_ids]
+
+    total   = len(tasks)
+    lines   = [f"📅 <b>ПЛАН НА СЕГОДНЯ</b>  <code>[{total} задач]</code>\n"]
+
+    if overdue:
+        lines.append(f"‼️ <b>ПРОСРОЧЕНО ({len(overdue)}):</b>")
+        for t in overdue:
+            lines.append(f"  ◦ {_task_line(t)}")
         lines.append("")
 
     if in_progress:
-        lines.append("🔄 <b>В ПРОЦЕССЕ:</b>")
+        lines.append(f"🔄 <b>В ПРОЦЕССЕ ({len(in_progress)}):</b>")
         for t in in_progress:
             lines.append(f"  ▶ {_task_line(t)}")
         lines.append("")
 
-    if todo:
-        lines.append("📋 <b>ОСТАЛОСЬ:</b>")
-        for t in todo:
+    if due_today:
+        lines.append(f"🔥 <b>НА СЕГОДНЯ ({len(due_today)}):</b>")
+        for t in due_today:
+            lines.append(f"  ◦ {_task_line(t)}")
+        lines.append("")
+
+    if no_deadline:
+        lines.append(f"📋 <b>ТЕКУЩИЕ ({len(no_deadline)}):</b>")
+        for t in no_deadline:
             lines.append(f"  ◦ {_task_line(t)}")
 
-    return "\n".join(lines)
+    return "\n".join(lines).rstrip()
 
 
 def format_tasks_list(tasks: List[Task]) -> str:

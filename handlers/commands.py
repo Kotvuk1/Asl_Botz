@@ -236,22 +236,21 @@ async def cmd_reminders(message: Message) -> None:
         )
         return
 
+    _repeat_labels = {
+        "daily": "  🔁 каждый день",
+        "weekly": "  🔁 каждую неделю",
+        "weekdays": "  🔁 каждый будний день",
+        "monthly": "  🔁 каждый месяц",
+    }
+    now_utc = datetime.now(timezone.utc)
+
     lines = ["⏰ <b>Твои напоминания:</b>\n"]
     for r in items:
         when = format_remind_at(r.remind_at)
-        repeat_str = (
-            f"  🔁 {{'daily':'каждый день','weekly':'каждую неделю',"
-            f"'weekdays':'будни','monthly':'каждый месяц'}}.get('{r.repeat_pattern}',r.repeat_pattern)"
-        ) if r.repeat_pattern else ""
-        # simpler formatting:
-        repeat_label = {
-            "daily": "  🔁 каждый день",
-            "weekly": "  🔁 каждую неделю",
-            "weekdays": "  🔁 каждый будний день",
-            "monthly": "  🔁 каждый месяц",
-        }.get(r.repeat_pattern or "", "")
+        repeat_label = _repeat_labels.get(r.repeat_pattern or "", "")
+        overdue_mark = " ‼️" if r.remind_at <= now_utc else ""
         lines.append(
-            f"<b>#{r.id}</b> — {when}{repeat_label}\n"
+            f"<b>#{r.id}</b>{overdue_mark} — {when}{repeat_label}\n"
             f"   {r.text}"
         )
     await message.answer("\n\n".join(lines), parse_mode="HTML")

@@ -15,7 +15,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from config import settings
 from core.db import init_db, close_db
 from core.utils import setup_logging
-from core.scheduler import reminder_loop, weekly_report_loop, deadline_loop, daily_digest_loop
+from core.scheduler import reminder_loop, weekly_report_loop, deadline_loop, daily_digest_loop, send_due_reminders
 from core.whitelist import init_whitelist
 from handlers.commands import router as commands_router
 from handlers.messages import router as messages_router
@@ -79,6 +79,14 @@ async def on_startup(bot: Bot) -> None:
         BotCommand(command="export",       description="📦 Экспорт всех данных"),
         BotCommand(command="think",        description="🧠 Режим «Думаем вслух»"),
     ])
+
+    # Fire any overdue reminders immediately on startup (catches missed ones while bot was down)
+    try:
+        sent = await send_due_reminders(bot)
+        if sent:
+            logger.info("Startup: fired %d overdue reminder(s).", sent)
+    except Exception:
+        logger.exception("Startup: failed to fire overdue reminders")
 
     # Start background scheduler loops
     _bg_tasks.append(asyncio.create_task(reminder_loop(bot),       name="reminder_loop"))
