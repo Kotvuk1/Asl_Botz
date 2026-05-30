@@ -282,11 +282,9 @@ async def extract_and_save_memories(
     if message_date:
         if message_date.tzinfo is None:
             message_date = message_date.replace(tzinfo=timezone.utc)
-        # Convert to Kazakhstan time (UTC+5)
         from datetime import timedelta
-        kz_offset = timedelta(hours=5)
-        local_dt = message_date + kz_offset
-        msg_date_str = local_dt.strftime("%d %B %Y, %H:%M (UTC+5)")
+        local_dt = message_date.replace(tzinfo=None) + timedelta(hours=settings.tz_offset)
+        msg_date_str = local_dt.strftime(f"%d %B %Y, %H:%M (UTC+{settings.tz_offset})")
     else:
         msg_date_str = "дата неизвестна"
 

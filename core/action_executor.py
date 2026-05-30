@@ -18,11 +18,16 @@ from core.tools import (
     add_habit,
     add_task,
     complete_task,
+    format_goals_list,
+    format_habits_list,
     format_stats,
     format_tasks_list,
     format_today_plan,
     format_tomorrow_plan,
+    get_goals,
     get_habit_streak,
+    get_habits,
+    get_habits_done_today,
     get_tasks,
     get_today_tasks,
     get_tomorrow_tasks,
@@ -98,6 +103,10 @@ async def execute_action(
             return await _exec_search(user_id, params)
         elif command == "habitdone":
             return await _exec_habitdone(user_id, params)
+        elif command == "goals":
+            return await _exec_goals(user_id)
+        elif command == "habits":
+            return await _exec_habits(user_id)
         else:
             logger.warning("Unknown action command: %s", command)
             return None
@@ -288,3 +297,25 @@ async def _exec_habitdone(user_id: int, habit_id_str: str) -> str:
         streak_msg = f" 🔥 Серия: {streak} дней!" if streak > 1 else ""
         return f"✅ Привычка #{hid} отмечена!{streak_msg}"
     return "Привычка не найдена или уже отмечена сегодня."
+
+
+async def _exec_goals(user_id: int) -> str:
+    async with AsyncSessionFactory() as session:
+        goals = await get_goals(session, user_id)
+    return format_goals_list(goals)
+
+
+async def _exec_habits(user_id: int) -> str:
+    async with AsyncSessionFactory() as session:
+        habits = await get_habits(session, user_id, only_active=True)
+        done_today = await get_habits_done_today(session, user_id)
+    if not habits:
+        return "🔁 Привычек пока нет. Напиши: <i>«буду каждый день X»</i>"
+    lines = ["🔁 <b>Твои привычки:</b>\n"]
+    for h in habits:
+        done_mark = "✅" if h.id in done_today else "◦"
+        async with AsyncSessionFactory() as s2:
+            streak, best = await get_habit_streak(s2, h.id)
+        streak_str = f"  🔥 {streak} дн." if streak > 0 else ""
+        lines.append(f"{done_mark} <b>#{h.id}</b> {h.title}{streak_str}  <i>(рекорд: {best})</i>")
+    return "\n".join(lines)

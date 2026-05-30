@@ -52,6 +52,7 @@ class GroqRouter:
         memory_context: str = "",
         current_datetime: str = "",
         tasks_context: str = "",
+        goals_context: str = "",
         habits_context: str = "",
         think_mode: bool = False,
     ) -> str:
@@ -62,8 +63,14 @@ class GroqRouter:
 
         if tasks_context:
             system_content += (
-                "\n\n## История задач пользователя (последние 90 дней):\n"
+                "\n\n## Задачи пользователя (последние 30 дней):\n"
                 + tasks_context
+            )
+
+        if goals_context:
+            system_content += (
+                "\n\n## Активные цели пользователя (используй ID для управления):\n"
+                + goals_context
             )
 
         if habits_context:

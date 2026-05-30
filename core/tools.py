@@ -158,6 +158,24 @@ async def search_memories(
     return result.scalars().all()
 
 
+# ── Goals context for LLM ────────────────────────────────────────────────────
+
+async def get_goals_context(session: AsyncSession, user_id: int) -> str:
+    """Return active goals formatted for the LLM system prompt."""
+    goals = await get_goals(session, user_id, status="active")
+    if not goals:
+        return ""
+    lines = []
+    for g in goals:
+        pct = f" [{g.progress}%]" if g.progress else ""
+        dl_str = ""
+        if g.deadline:
+            local_dl = g.deadline + timedelta(hours=settings.tz_offset)
+            dl_str = f" → до {local_dl.strftime('%d.%m.%Y')}"
+        lines.append(f"  #{g.id} {g.title}{pct}{dl_str}")
+    return "\n".join(lines)
+
+
 # ── Habits context for LLM ───────────────────────────────────────────────────
 
 async def get_habits_context(session: AsyncSession, user_id: int) -> str:
@@ -175,16 +193,17 @@ async def get_habits_context(session: AsyncSession, user_id: int) -> str:
 
 # ── Task context for LLM ──────────────────────────────────────────────────────
 
-async def get_tasks_context(session: AsyncSession, user_id: int, days: int = 90) -> str:
+async def get_tasks_context(session: AsyncSession, user_id: int, days: int = 30) -> str:
     since = datetime.now(timezone.utc) - timedelta(days=days)
     result = await session.execute(
         select(Task)
         .where(Task.user_id == user_id, Task.created_at >= since)
         .order_by(Task.created_at.desc())
+        .limit(50)          # cap to avoid bloating LLM context
     )
     tasks = result.scalars().all()
     if not tasks:
-        return "Задач за последние 90 дней нет."
+        return ""
 
     by_date: dict = defaultdict(list)
     for t in tasks:
@@ -630,7 +649,7 @@ async def get_today_tasks(session: AsyncSession, user_id: int) -> List[Task]:
                 # Due today
                 and_(Task.deadline >= today_start_utc, Task.deadline < today_end_utc),
                 # Overdue (has deadline in the past)
-                and_(Task.deadline.isnot(None), Task.deadline < today_start_utc),
+                and_(Task.deadline.is_not(None), Task.deadline < today_start_utc),
                 # Recent todos with no deadline (last 7 days)
                 and_(Task.deadline.is_(None), Task.created_at >= week_ago_utc),
             )
@@ -738,9 +757,9 @@ def format_today_plan(tasks: List[Task]) -> str:
 
 def format_tasks_list(tasks: List[Task]) -> str:
     if not tasks:
-        return "✅ Список задач пуст!"
+        return "✅ Активных задач нет!"
 
-    lines = ["📋 <b>Ваши задачи:</b>\n"]
+    lines = ["📋 <b>Твои задачи:</b>\n"]
     for t in tasks:
         icon = STATUS_ICON.get(t.status, "⬜")
         desc = f"\n   <i>{t.description}</i>" if t.description else ""

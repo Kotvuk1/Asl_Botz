@@ -22,7 +22,7 @@ from core.memory import (
     get_history,
     get_or_create_user,
 )
-from core.tools import get_tasks_context, get_habits_context
+from core.tools import get_goals_context, get_habits_context, get_tasks_context
 from core.utils import current_datetime_str
 from core.voice import transcribe_voice
 
@@ -120,6 +120,7 @@ async def _process_text(message: Message, text: str) -> None:
         history = await get_history(session, user.id)
         memory_ctx = await format_memory_context(session, user.id)
         tasks_ctx = await get_tasks_context(session, user.id)
+        goals_ctx = await get_goals_context(session, user.id)
         habits_ctx = await get_habits_context(session, user.id)
         now_str = current_datetime_str()
 
@@ -129,6 +130,7 @@ async def _process_text(message: Message, text: str) -> None:
             memory_context=memory_ctx,
             current_datetime=now_str,
             tasks_context=tasks_ctx,
+            goals_context=goals_ctx,
             habits_context=habits_ctx,
             think_mode=user.id in _think_mode,
         )

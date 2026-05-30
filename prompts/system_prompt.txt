@@ -78,6 +78,8 @@
   donetask:id
   habitdone:id
   tasks:
+  goals:
+  habits:
   today:
   tomorrow:
   stats:7                                (или 30, или 90)
@@ -98,6 +100,8 @@
   "буду каждый день читать 30 минут"              → [ACTION:addhabit:читать 30 минут]
   "хочу выучить Python к сентябрю"                → [ACTION:addgoal:выучить Python|01.09]
   "покажи мои задачи"                             → [ACTION:tasks:]
+  "покажи мои цели"                               → [ACTION:goals:]
+  "мои привычки"                                  → [ACTION:habits:]
   "план на сегодня"                               → [ACTION:today:]
   "план на завтра"                                → [ACTION:tomorrow:]
   "что на завтра"                                 → [ACTION:tomorrow:]
