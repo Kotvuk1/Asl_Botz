@@ -167,7 +167,7 @@ async def get_goals_context(session: AsyncSession, user_id: int) -> str:
         return ""
     lines = []
     for g in goals:
-        pct = f" [{g.progress}%]" if g.progress else ""
+        pct = f" [{g.progress}%]"
         dl_str = ""
         if g.deadline:
             local_dl = g.deadline + timedelta(hours=settings.tz_offset)

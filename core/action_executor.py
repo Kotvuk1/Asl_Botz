@@ -309,13 +309,13 @@ async def _exec_habits(user_id: int) -> str:
     async with AsyncSessionFactory() as session:
         habits = await get_habits(session, user_id, only_active=True)
         done_today = await get_habits_done_today(session, user_id)
-    if not habits:
-        return "🔁 Привычек пока нет. Напиши: <i>«буду каждый день X»</i>"
-    lines = ["🔁 <b>Твои привычки:</b>\n"]
-    for h in habits:
-        done_mark = "✅" if h.id in done_today else "◦"
-        async with AsyncSessionFactory() as s2:
-            streak, best = await get_habit_streak(s2, h.id)
-        streak_str = f"  🔥 {streak} дн." if streak > 0 else ""
-        lines.append(f"{done_mark} <b>#{h.id}</b> {h.title}{streak_str}  <i>(рекорд: {best})</i>")
+        if not habits:
+            return "🔁 Привычек пока нет. Напиши: <i>«буду каждый день X»</i>"
+        # Fetch all streaks in the same session — no N+1 DB connections
+        lines = ["🔁 <b>Твои привычки:</b>\n"]
+        for h in habits:
+            done_mark = "✅" if h.id in done_today else "◦"
+            streak, best = await get_habit_streak(session, h.id)
+            streak_str = f"  🔥 {streak} дн." if streak > 0 else ""
+            lines.append(f"{done_mark} <b>#{h.id}</b> {h.title}{streak_str}  <i>(рекорд: {best})</i>")
     return "\n".join(lines)

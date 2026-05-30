@@ -212,25 +212,29 @@ async def deadline_loop(bot) -> None:
                             f"{priority_mark} <b>#{task.id}</b> {task.title}\n"
                             f"Срок: {local_dl.strftime('%d.%m.%Y в %H:%M')}"
                         )
+                        alert_sent = False
                         try:
                             await bot.send_message(task.user_id, msg, parse_mode="HTML")
+                            alert_sent = True
                             logger.info(
                                 "Deadline alert %s sent for task %d", threshold_name, task.id
                             )
-                        except Exception as e:
-                            logger.error(
-                                "Failed to send deadline alert for task %d: %s", task.id, e
+                        except Exception:
+                            logger.exception(
+                                "Failed to send deadline alert for task %d threshold %s",
+                                task.id, threshold_name,
                             )
 
-                        # Save alert record
-                        session.add(DeadlineAlert(
-                            task_id=task.id,
-                            threshold=threshold_name,
-                        ))
+                        # Save alert record ONLY if message was delivered
+                        if alert_sent:
+                            session.add(DeadlineAlert(
+                                task_id=task.id,
+                                threshold=threshold_name,
+                            ))
 
                 await session.commit()
-        except Exception as e:
-            logger.error("Deadline loop error: %s", e)
+        except Exception:
+            logger.exception("Deadline loop error")
         await asyncio.sleep(300)  # check every 5 minutes
 
 
@@ -252,8 +256,8 @@ async def daily_digest_loop(bot) -> None:
             ):
                 _last_digest_date = today_str
                 await _send_digests(bot)
-        except Exception as e:
-            logger.error("Daily digest loop error: %s", e)
+        except Exception:
+            logger.exception("Daily digest loop error")
         await asyncio.sleep(60)
 
 
@@ -271,11 +275,15 @@ async def _send_digests(bot) -> None:
                 )
                 tasks = tasks_result.scalars().all()
 
-                # Today's reminders
-                today_start = datetime.now(timezone.utc).replace(
-                    hour=0, minute=0, second=0, microsecond=0
-                )
-                today_end = today_start + timedelta(days=1)
+                # Today's reminders — use local midnight boundaries, not UTC
+                from datetime import time as dtime
+                today_local = _local_today()
+                today_start = (
+                    datetime.combine(today_local, dtime.min) - timedelta(hours=settings.tz_offset)
+                ).replace(tzinfo=timezone.utc)
+                today_end = (
+                    datetime.combine(today_local + timedelta(days=1), dtime.min) - timedelta(hours=settings.tz_offset)
+                ).replace(tzinfo=timezone.utc)
                 rem_result = await session.execute(
                     select(Reminder).where(
                         Reminder.user_id == user_id,
@@ -439,34 +447,28 @@ async def weekly_report_loop(bot) -> None:
             ):
                 _last_report_date = today_str
                 await _send_reports(bot)
-        except Exception as e:
-            logger.error("Weekly report loop error: %s", e)
+        except Exception:
+            logger.exception("Weekly report loop error")
         await asyncio.sleep(60)
 
 
 async def _send_reports(bot) -> None:
     week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    allowed = get_allowed_ids()  # use in-memory whitelist (updated by /adduser)
     async with AsyncSessionFactory() as session:
-        users_result = await session.execute(
-            select(User).where(User.is_active == True)  # noqa: E712
-        )
-        users = users_result.scalars().all()
-
-        for user in users:
-            if user.id not in settings.allowed_user_ids:
-                continue
+        for user_id in allowed:
             tasks_result = await session.execute(
                 select(Task)
-                .where(Task.user_id == user.id, Task.created_at >= week_ago)
+                .where(Task.user_id == user_id, Task.created_at >= week_ago)
                 .order_by(Task.created_at)
             )
             tasks = tasks_result.scalars().all()
             report = _build_report(tasks)
             try:
-                await bot.send_message(user.id, report, parse_mode="HTML")
-                logger.info("Weekly report sent to user %d", user.id)
-            except Exception as e:
-                logger.error("Failed to send weekly report to %d: %s", user.id, e)
+                await bot.send_message(user_id, report, parse_mode="HTML")
+                logger.info("Weekly report sent to user %d", user_id)
+            except Exception:
+                logger.exception("Failed to send weekly report to %d", user_id)
 
 
 def _build_report(tasks: list) -> str:
