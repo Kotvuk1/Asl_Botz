@@ -36,8 +36,10 @@ def setup_logging() -> None:
 
 
 def current_datetime_str() -> str:
-    now = datetime.now(timezone.utc)
-    return now.strftime("%d %B %Y, %H:%M UTC")
+    """Return LOCAL datetime string for the LLM — must not be UTC."""
+    from datetime import timedelta
+    local = datetime.now(timezone.utc) + timedelta(hours=settings.tz_offset)
+    return local.strftime(f"%d %B %Y, %H:%M (UTC+{settings.tz_offset})")
 
 
 def truncate(text: str, max_len: int = 200) -> str:

@@ -27,7 +27,7 @@ async def transcribe_voice(audio_bytes: bytes, filename: str = "voice.ogg") -> s
             transcription = await client.audio.transcriptions.create(
                 file=(filename, io.BytesIO(audio_bytes)),
                 model="whisper-large-v3",
-                language="ru",
+                # No language= → Whisper auto-detects (ru/kz/en)
                 response_format="json",
             )
             text = getattr(transcription, "text", None) or str(transcription)
